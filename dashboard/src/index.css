@@ -1,0 +1,211 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Smooth scrolling for entire app */
+* {
+  scroll-behavior: smooth;
+}
+
+/* Custom scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1a1a2e;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #4a4a6a;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #6a6a8a;
+}
+
+/* Reduce animation for better performance */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@layer base {
+  body {
+    @apply bg-dark-bg text-gray-100 font-sans antialiased;
+  }
+
+  /* Smooth scroll behavior */
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(79, 70, 229, 0.5);
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(79, 70, 229, 0.7);
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-gradient-to-br from-white/5 to-white/[0.02] backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl;
+  }
+
+  .glass-card-hover {
+    @apply glass-card transition-all duration-300 hover:border-accent-primary/30 hover:shadow-glow-sm;
+  }
+
+  .text-gradient {
+    @apply bg-gradient-to-r from-accent-primary to-accent-info bg-clip-text text-transparent;
+  }
+
+  /* Responsive Grid Utilities */
+  .grid-responsive {
+    @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6;
+  }
+
+  /* Animation Utilities */
+  .fade-in {
+    @apply animate-fadeIn;
+  }
+
+  .slide-in-up {
+    @apply animate-slideInUp;
+  }
+
+  .pulse-glow {
+    @apply animate-pulse shadow-glow;
+  }
+
+  /* Status indicator animations */
+  .status-indicator {
+    @apply inline-block w-3 h-3 rounded-full;
+  }
+
+  .status-indicator.active {
+    @apply bg-accent-success animate-pulse;
+  }
+
+  .status-indicator.warning {
+    @apply bg-accent-warning animate-bounce;
+  }
+
+  .status-indicator.error {
+    @apply bg-accent-danger animate-pulse;
+  }
+
+  /* Card transition animations */
+  .card-transition {
+    @apply transition-all duration-300 ease-in-out;
+  }
+
+  .card-hover {
+    @apply card-transition hover:scale-105 hover:shadow-glow;
+  }
+}
+
+/* Custom keyframe animations */
+@layer utilities {
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes slideInUp {
+    from {
+      transform: translateY(10px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  @keyframes slideInDown {
+    from {
+      transform: translateY(-10px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: -1000px 0;
+    }
+    100% {
+      background-position: 1000px 0;
+    }
+  }
+
+  .animate-fadeIn {
+    animation: fadeIn 0.5s ease-in-out;
+  }
+
+  .animate-slideInUp {
+    animation: slideInUp 0.5s ease-in-out;
+  }
+
+  .animate-slideInDown {
+    animation: slideInDown 0.5s ease-in-out;
+  }
+
+  .animate-shimmer {
+    animation: shimmer 2s infinite;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.1),
+      transparent
+    );
+    background-size: 1000px 100%;
+  }
+
+  /* Responsive text sizes */
+  .text-responsive {
+    @apply text-sm md:text-base lg:text-lg;
+  }
+
+  .text-responsive-lg {
+    @apply text-lg md:text-xl lg:text-2xl;
+  }
+
+  /* Responsive padding */
+  .p-responsive {
+    @apply p-4 md:p-6 lg:p-8;
+  }
+
+  /* Responsive grid gaps */
+  .gap-responsive {
+    @apply gap-4 md:gap-6 lg:gap-8;
+  }
+}

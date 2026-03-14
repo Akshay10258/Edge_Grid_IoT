@@ -1,174 +1,293 @@
 # EdgeGrid Hybrid Dashboard
 
-EdgeGrid Hybrid Dashboard is a React-based monitoring and control UI for a distributed smart-grid prototype that uses:
+EdgeGrid Hybrid Dashboard is a distributed smart-grid prototype built with ESP nodes, MQTT, ESP-NOW, a Node.js bridge, and a React dashboard.
 
-- MQTT for broker-based messaging
-- ESP-NOW for peer-to-peer telemetry between nodes
-- A Node.js bridge to fan MQTT data out to WebSocket clients and accept control commands
+It combines:
 
-This repository contains the dashboard frontend, backend bridge, and firmware source in one place.
+- MQTT for reliable control, summaries, and event publishing
+- ESP-NOW for fast peer-to-peer communication between nodes
+- a backend bridge for WebSocket streaming and manual control
+- a dashboard for live monitoring, visualization, and operator control
 
-## What This Project Does
+## Highlights
 
-- Displays live node telemetry (load, temperature, status)
-- Shows total grid load and node-level health
-- Visualizes communication performance (MQTT and ESP-NOW)
-- Streams and classifies system events
-- Sends manual control commands (ON, OFF, SHUTDOWN, RESTORE)
+- Real-time node telemetry: load, temperature, vibration, status
+- Hybrid communication model: MQTT + ESP-NOW
+- Automatic leader election using MAC-based priority
+- Self-healing re-election when the leader fails or disappears
+- Automatic load shedding and restore logic
+- Manual shutdown and restore from the dashboard
+- Live event stream and communication metrics
 
-## System Architecture
+## How The Project Works
+
+Each ESP node reads local sensor data and publishes heartbeat messages to MQTT. Nodes also exchange fast peer updates over ESP-NOW.
+
+One active node becomes the leader. The leader:
+
+- monitors node heartbeats
+- aggregates total active load
+- publishes `grid/leader/summary`
+- detects warning and overload conditions
+- decides which node to shut down or restore
+
+The Node.js bridge subscribes to `grid/#`, forwards MQTT messages to the browser over WebSocket, and exposes a REST endpoint for manual control.
+
+The React dashboard connects to the bridge and shows the current grid state, node state, events, and communication performance.
+
+## Architecture
 
 `ESP nodes -> MQTT broker -> backend/mqtt-bridge.js -> WebSocket + REST -> React dashboard`
 
-Runtime defaults:
+```mermaid
+flowchart TD
+  subgraph Nodes[ESP Nodes]
+    N1[Node Firmware]
+    N2[Node Firmware]
+    N3[Node Firmware]
+  end
 
-- Dashboard (Vite dev): `http://localhost:5173`
-- Bridge HTTP and WebSocket: `http://localhost:3001` and `ws://localhost:3001`
+  subgraph Mesh[ESP-NOW Data Plane]
+    E1[Fast peer updates]
+    E2[Emergency alerts]
+    E3[Peer-to-peer shutdown packets]
+  end
 
-## Updated Folder Structure
+  subgraph Broker[MQTT Broker]
+    M1[grid/heartbeat/<node>]
+    M2[grid/leader/summary]
+    M3[grid/events]
+    M4[grid/control/<node>]
+  end
+
+  subgraph Bridge[Node.js Bridge]
+    B1[MQTT subscriber]
+    B2[WebSocket broadcaster]
+    B3[REST control endpoint]
+  end
+
+  subgraph UI[React Dashboard]
+    U1[Monitoring UI]
+    U2[Charts and tables]
+    U3[Manual control]
+  end
+
+  N1 --> E1
+  N2 --> E1
+  N3 --> E1
+  E1 --> E2
+  E2 --> E3
+
+  N1 --> M1
+  N2 --> M1
+  N3 --> M1
+  N1 --> M2
+  N1 --> M3
+  N2 --> M3
+  N3 --> M3
+
+  M1 --> B1
+  M2 --> B1
+  M3 --> B1
+  B1 --> B2
+  B2 --> U1
+  B2 --> U2
+
+  U3 --> B3
+  B3 --> M4
+  M4 --> N1
+  M4 --> N2
+  M4 --> N3
+```
+
+## Self-Healing and Dynamic Leader Re-Election
+
+The system does not rely on one fixed controller node.
+
+Each node watches leader heartbeats. If the current leader is no longer seen within the firmware timeout window, followers automatically start leader election.
+
+Leader election is deterministic:
+
+- only active, non-shutdown nodes are eligible
+- the node with the lowest MAC address becomes leader
+- nodes wait for a short backoff, then re-check eligibility before claiming leadership
+
+Re-election can happen when:
+
+- the leader stops publishing heartbeats
+- the leader is shut down automatically during overload handling
+- the leader is shut down manually from the dashboard
+- a lower-MAC eligible node appears and the current leader is no longer the correct leader
+
+Once elected, the new leader immediately resumes summary publishing and load-management decisions. The dashboard updates automatically as soon as it receives summaries from the new leader.
+
+## Functional Split
+
+### Control Plane
+
+Responsible for cluster-level decision making:
+
+- leader election
+- MQTT heartbeats
+- load aggregation
+- overload detection
+- automatic load shedding
+- automatic restore logic
+- leader summary publishing
+- backend event publishing
+
+### Data Plane
+
+Responsible for fast communication outside MQTT:
+
+- ESP-NOW fast broadcasts
+- emergency alerts
+- peer-to-peer shutdown packets
+- reachability indication
+- fallback behavior when MQTT or ESP-NOW is degraded
+
+### Device Logic and Actuation
+
+Responsible for node-local sensing and execution:
+
+- load reading
+- temperature reading
+- vibration reading
+- maintaining node state
+- executing shutdown and restore commands
+- safe fallback when sensors or communication paths fail
+
+## Why These Components Were Used
+
+### ESP8266 / ESP32-Class Board
+
+Chosen for Wi-Fi support, ESP-NOW support, low cost, and suitability for multi-node distributed control.
+
+### Potentiometer
+
+Used to simulate electrical load in a simple, controllable, repeatable way during demonstrations.
+
+### DHT11
+
+Used for basic temperature monitoring and threshold-based alerts.
+
+### MPU6050
+
+Used to detect vibration and support condition-monitoring behavior in addition to energy monitoring.
+
+### Relay
+
+Used as the final actuation element to apply shutdown and restore decisions physically at node level.
+
+## Repository Structure
 
 ```text
 edgegrid-dashboard/
 |-- backend/
-|   |-- mqtt-bridge.js        # MQTT <-> WebSocket/REST bridge
+|   |-- mqtt-bridge.js
 |   `-- test-server.js
-|
 |-- dashboard/
-|   |-- dist/                 # Production build output
+|   |-- dist/
 |   |-- index.html
 |   |-- postcss.config.js
 |   |-- tailwind.config.js
 |   |-- vite.config.js
 |   `-- src/
 |       |-- api/
-|       |   `-- index.js
 |       |-- components/
-|       |   |-- ArchitectureDiagram.jsx
-|       |   |-- CommStatsCard.jsx
-|       |   |-- ControlPanel.jsx
-|       |   |-- EventLog.jsx
-|       |   |-- KPICard.jsx
-|       |   |-- LoadChart.jsx
-|       |   |-- Loading.jsx
-|       |   |-- NodeTable.jsx
-|       |   |-- StatusBadge.jsx
-|       |   |-- TopBar.jsx
-|       |   `-- index.js
 |       |-- hooks/
-|       |   `-- useWebSocket.js
 |       |-- pages/
-|       |   `-- Dashboard.jsx
 |       |-- App.jsx
 |       |-- index.css
 |       `-- main.jsx
-|
 |-- firmware/
 |   `-- arduino/
 |       `-- eap8266.ino
-|
 |-- .env
 |-- package.json
 `-- README.md
 ```
 
-## Prerequisites
+## Tech Stack
 
-- Node.js 18+ (recommended)
+- Firmware: Arduino C++ for ESP8266 / ESP32-class boards
+- Messaging: MQTT and ESP-NOW
+- Backend: Node.js, Express, ws, mqtt
+- Frontend: React, Vite, Tailwind CSS, Recharts
+
+## Setup
+
+### Prerequisites
+
+- Node.js 18+
 - npm 9+
-- Running MQTT broker reachable from this machine
-- Firmware publishing heartbeat/summary/events topics
+- MQTT broker reachable from your machine
+- ESP firmware publishing under `grid/#`
 
-## Installation
+### Install
 
 ```bash
 npm install
 ```
 
-## Environment Configuration
+### Environment
 
-Root `.env` values used by frontend:
+Root `.env`:
 
 ```env
 VITE_WS_URL=ws://localhost:3001
 VITE_API_URL=http://localhost:3001
 ```
 
-Important:
+Note:
 
-- The frontend reads `VITE_WS_URL` and `VITE_API_URL`.
-- The bridge MQTT broker URL is currently hardcoded in `backend/mqtt-bridge.js` as `MQTT_URL`.
+- frontend URLs come from `.env`
+- the MQTT broker URL is currently hardcoded in [backend/mqtt-bridge.js](backend/mqtt-bridge.js)
 
-If your broker IP changes, update this line in `backend/mqtt-bridge.js`:
-
-```js
-const MQTT_URL = "mqtt://<your-broker-ip>:1883";
-```
-
-## Run the Project
+## Run
 
 Use two terminals.
 
-1. Start MQTT bridge:
+### 1. Start the bridge
 
 ```bash
 npm run mqtt-bridge
 ```
 
-Expected bridge output includes:
-
-- Bridge startup on port 3001
-- MQTT connected and subscribed to `grid/#`
-
-2. Start dashboard:
+### 2. Start the dashboard
 
 ```bash
 npm run dev
 ```
 
-Open: `http://localhost:5173`
+Open:
 
-## Available npm Scripts
+- `http://localhost:5173`
 
-From `package.json`:
+## Available Scripts
 
-- `npm run dev` - start Vite dev server for dashboard
-- `npm run build` - build dashboard to `dashboard/dist`
+- `npm run dev` - start dashboard dev server
+- `npm run build` - build dashboard into `dashboard/dist`
 - `npm run preview` - preview production build
-- `npm run mqtt-bridge` - run MQTT/WebSocket/REST bridge
-- `npm run test-server` - run test backend server
+- `npm run mqtt-bridge` - start MQTT/WebSocket bridge
+- `npm run test-server` - start optional mock backend for UI testing
 
-## MQTT Topics and Data Flow
+## MQTT Topics
 
-Bridge subscribes to:
-
-- `grid/#`
-
-Observed high-frequency topics include:
+The project uses these main topics:
 
 - `grid/heartbeat/<node-id>`
 - `grid/leader/summary`
 - `grid/events`
-
-Frontend hook (`dashboard/src/hooks/useWebSocket.js`) expects WebSocket envelopes like:
-
-```json
-{
-  "topic": "grid/leader/summary",
-  "data": { "leader": "Node-1", "nodes": [] },
-  "ts": 1710000000000
-}
-```
-
-The dashboard also handles:
-
-- `grid/events`
-- node status fields such as `shutdown`, `espnow`, `load`, `temp`
+- `grid/control/<node>`
 
 ## Manual Control API
 
-Bridge exposes POST `/control` on port 3001.
+Bridge endpoint:
 
-Request body:
+- `POST /control`
+
+Example request:
 
 ```json
 {
@@ -183,48 +302,33 @@ Supported actions:
 - `ON` or `RESTORE`
 - `OFF` or `SHUTDOWN`
 
-The bridge publishes commands to:
+## Common Issues
 
-- `grid/control/<node>`
+### Nodes disappear after dashboard refresh
 
-## Common Troubleshooting
+Usually this means the dashboard is not receiving fresh `grid/leader/summary` packets yet.
 
-### Dashboard loads but nodes disappear after refresh
+Check:
 
-Likely causes:
+1. the bridge is connected and subscribed to `grid/#`
+2. the leader is actively publishing `grid/leader/summary`
+3. `VITE_WS_URL` points to the correct bridge host
 
-- Bridge is receiving only heartbeat topics while UI waits for summary topic data
-- Summary packets are delayed or not published after reconnect
+### Manual control does not work
 
-Checks:
+Check:
 
-1. Confirm bridge terminal is connected to MQTT and subscribed.
-2. Confirm WebSocket client reconnects in browser dev tools.
-3. Confirm `grid/leader/summary` is being published continuously.
-4. Confirm `VITE_WS_URL` points to the running bridge instance.
+1. `VITE_API_URL` points to the bridge
+2. the bridge is running on port 3001
+3. node IDs in the UI match the IDs used in MQTT topics
 
-### Control buttons do nothing
+### Bridge receives no MQTT data
 
-Checks:
+Check:
 
-1. Confirm `VITE_API_URL` is `http://localhost:3001` (or your bridge host).
-2. Verify POST `/control` returns success.
-3. Verify node IDs in UI match subscribed node topic naming.
-
-### Bridge starts but no MQTT messages
-
-Checks:
-
-1. Verify broker IP in `backend/mqtt-bridge.js`.
-2. Verify broker port and network/firewall accessibility.
-3. Verify firmware is publishing under `grid/#`.
-
-## Development Notes
-
-- Frontend source of truth: `dashboard/src/pages/Dashboard.jsx`
-- WebSocket normalization and event typing: `dashboard/src/hooks/useWebSocket.js`
-- Message routing and control publishing: `backend/mqtt-bridge.js`
-- Tailwind styles and theme: `dashboard/src/index.css` and `dashboard/tailwind.config.js`
+1. broker IP and port in [backend/mqtt-bridge.js](backend/mqtt-bridge.js)
+2. broker reachability on the network
+3. firmware is publishing under `grid/#`
 
 ## Build for Production
 
@@ -233,7 +337,7 @@ npm run build
 npm run preview
 ```
 
-Build output is generated in:
+Production output:
 
 - `dashboard/dist`
 
